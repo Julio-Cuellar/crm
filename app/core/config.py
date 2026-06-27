@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # JWT
     JWT_SECRET: str = "supersecretkey"
-    JWT_ACCESS_EXPIRE_MINUTES: int = 60
+    JWT_ACCESS_EXPIRE_MINUTES: float = 60.0
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 
     # n8n

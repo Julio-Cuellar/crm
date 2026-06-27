@@ -3,6 +3,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+TENANT_MODES = {"SERVICES", "SALES"}
+
 
 class TenantBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
@@ -10,8 +12,8 @@ class TenantBase(BaseModel):
     phone_number_id: str | None = Field(None, max_length=50)
     timezone: str = Field("America/Mexico_City", max_length=100)
     locale: str = Field("es", max_length=10)
+    mode: str = Field("SERVICES", pattern="^(SERVICES|SALES)$")
 
-    # Configuración de Pydantic v2 para forzar alias camelCase en JSON
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,

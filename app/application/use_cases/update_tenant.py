@@ -15,20 +15,19 @@ class UpdateTenantUseCase:
         slug: str,
         phone_number_id: str | None = None,
         timezone: str = "America/Mexico_City",
-        locale: str = "es"
+        locale: str = "es",
+        mode: str = "SERVICES",
     ) -> Tenant:
         tenant = await self.tenant_repository.get_by_id(tenant_id)
         if not tenant:
             raise TenantNotFoundException(f"No se encontró el negocio solicitado.")
 
-        # Si el slug cambia, verificar que no esté duplicado
         if tenant.slug != slug:
             existing = await self.tenant_repository.get_by_slug(slug)
             if existing:
                 raise TenantSlugAlreadyExistsException(f"El identificador '{slug}' ya está registrado.")
 
-        # Aplicar los cambios al dominio
-        tenant.update_settings(name=name, timezone=timezone, locale=locale)
+        tenant.update_settings(name=name, timezone=timezone, locale=locale, mode=mode)
         tenant.slug = slug
         tenant.phone_number_id = phone_number_id
 

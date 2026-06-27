@@ -36,7 +36,8 @@ async def update_tenant(
             slug=tenant_in.slug,
             phone_number_id=tenant_in.phone_number_id,
             timezone=tenant_in.timezone,
-            locale=tenant_in.locale
+            locale=tenant_in.locale,
+            mode=tenant_in.mode,
         )
         return tenant
     except AppException as e:

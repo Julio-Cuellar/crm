@@ -56,6 +56,9 @@ class RegisterTenantUseCase:
 
         saved_pending = await self.pending_repo.save(pending)
 
+        # Siempre imprimir el token en la consola para facilitar el desarrollo/pruebas
+        print(f"\n[RegisterTenantUseCase] Token de verificación generado para {email}: {verification_token}\n")
+
         # 5. Publicar evento para enviar el correo de verificación (ej. vía n8n)
         if self.event_bus:
             payload = {
@@ -66,7 +69,5 @@ class RegisterTenantUseCase:
                 "expiresAt": saved_pending.token_expires_at.isoformat()
             }
             await self.event_bus.publish("registration.verification_requested", payload)
-        else:
-            print(f"[RegisterTenantUseCase] EventBus no disponible. Token de verificación para {email}: {verification_token}")
 
         return saved_pending
