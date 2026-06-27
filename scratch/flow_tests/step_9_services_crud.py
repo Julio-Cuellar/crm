@@ -1,3 +1,4 @@
+import asyncio
 from scratch.flow_tests.common import API_BASE, make_request
 
 
@@ -28,6 +29,9 @@ async def run_services_crud_step(owner_headers: dict, staff_headers: dict) -> No
     assert service_id is not None
     assert float(response.get("price")) == 850.0
 
+    # Esperar a que se asiente la transacción
+    await asyncio.sleep(0.2)
+
     # 2. Modificar el servicio como OWNER (HTTP 200)
     print("2. Modificando detalles del servicio como OWNER...")
     update_payload = {
@@ -46,6 +50,9 @@ async def run_services_crud_step(owner_headers: dict, staff_headers: dict) -> No
     )
     print(f"   -> Servicio actualizado (HTTP {status_put}): Nombre='{response_put.get('name')}', Precio={response_put.get('price')}")
     assert status_put == 200, "Debió retornar HTTP 200 OK."
+
+    # Esperar a que se asiente la transacción
+    await asyncio.sleep(0.2)
     assert response_put.get("name") == "Limpieza Dental Completa + Flúor"
     assert float(response_put.get("price")) == 1100.0
 
@@ -117,6 +124,9 @@ async def run_services_crud_step(owner_headers: dict, staff_headers: dict) -> No
     )
     print(f"   -> Respuesta de eliminación (HTTP {status_del}): {response_del.get('message')}")
     assert status_del == 200, "Debió retornar HTTP 200 OK."
+
+    # Esperar a que se asiente la transacción
+    await asyncio.sleep(0.2)
 
     # 7. Verificar que el servicio fue eliminado (HTTP 404 Not Found)
     print("7. Intentando consultar el servicio eliminado...")

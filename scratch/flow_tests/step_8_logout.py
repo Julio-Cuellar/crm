@@ -1,3 +1,4 @@
+import asyncio
 from scratch.flow_tests.common import API_BASE, make_request
 
 
@@ -16,6 +17,9 @@ async def run_logout_step(headers: dict) -> None:
         
     print(f"-> Respuesta HTTP {status}: {response.get('message')}")
     assert status == 200, "El cierre de sesión debió retornar HTTP 200."
+
+    # Esperar a que se asiente la transacción del logout en la base de datos
+    await asyncio.sleep(0.2)
 
     # Intentar llamar a /auth/me con el token invalidado
     print("\nIntentando llamar a /auth/me con el mismo token invalidado...")

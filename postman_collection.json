@@ -1,0 +1,641 @@
+{
+	"info": {
+		"_postman_id": "f0bfec29-2f2f-408a-8478-66018f3ddfe7",
+		"name": "JChat CRM API v1",
+		"description": "Colección completa para pruebas de los endpoints de JChat CRM, incluyendo Tenant Auth, Invitaciones, Catálogo de Servicios y Clientes.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Autenticación y Registro",
+			"item": [
+				{
+					"name": "Pre-registro de Tenant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"alejandro.gomez@dentalsanjose.com\",\n  \"password\": \"PasswordOwnerSeguro123\",\n  \"name\": \"Dr. Alejandro Gomez\",\n  \"tenantName\": \"Dental San Jose Clinic\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
+						},
+						"description": "Inicia el pre-registro de un nuevo tenant. Retorna HTTP 202 y envía un código numérico temporal al correo."
+					},
+					"response": []
+				},
+				{
+					"name": "Verificar Registro",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"alejandro.gomez@dentalsanjose.com\",\n  \"token\": \"REEMPLAZAR_CON_TOKEN_DE_DB\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/verify",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"verify"
+							]
+						},
+						"description": "Verifica el código temporal para materializar el Tenant. El usuario OWNER se creará asíncronamente mediante el worker de RabbitMQ."
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.accessToken) {",
+									"    pm.environment.set(\"access_token\", jsonData.accessToken);",
+									"}",
+									"if (jsonData.refreshToken) {",
+									"    pm.environment.set(\"refresh_token\", jsonData.refreshToken);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"alejandro.gomez@dentalsanjose.com\",\n  \"password\": \"PasswordOwnerSeguro123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"description": "Autentica al usuario y guarda automáticamente los tokens de acceso y refresco en variables de entorno."
+					},
+					"response": []
+				},
+				{
+					"name": "Consultar Mi Perfil",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"me"
+							]
+						},
+						"description": "Obtiene los detalles del usuario autenticado actual basándose en los claims de su token JWT."
+					},
+					"response": []
+				},
+				{
+					"name": "Cerrar Sesión (Logout)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Agrega el token JWT del usuario actual a la lista negra del servidor para invalidarlo permanentemente."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Invitaciones de Colaboradores",
+			"item": [
+				{
+					"name": "Enviar Invitación (OWNER o ADMIN)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"carlos.staff@dentalsanjose.com\",\n  \"role\": \"STAFF\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/invite",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"invite"
+							]
+						},
+						"description": "Genera una invitación para un colaborador en rol STAFF o ADMIN."
+					},
+					"response": []
+				},
+				{
+					"name": "Consultar Detalles de Invitación",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/invitations/REEMPLAZAR_CON_TOKEN_UUID_DE_INVITACION",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"invitations",
+								"REEMPLAZAR_CON_TOKEN_UUID_DE_INVITACION"
+							]
+						},
+						"description": "Endpoint público para resolver detalles informativos de una invitación sin autenticarse."
+					},
+					"response": []
+				},
+				{
+					"name": "Aceptar Invitación (Completar Registro)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"REEMPLAZAR_CON_TOKEN_UUID_DE_INVITACION\",\n  \"name\": \"Carlos Asistente\",\n  \"password\": \"PasswordStaff123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/invitations/accept",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"invitations",
+								"accept"
+							]
+						},
+						"description": "Crea el usuario colaborador final en base de datos y consume la invitación."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Catálogo de Servicios",
+			"item": [
+				{
+					"name": "Crear Servicio (OWNER o ADMIN)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Limpieza Dental Completa\",\n  \"description\": \"Limpieza con ultrasonido y pulido dental completo.\",\n  \"durationMinutes\": 45,\n  \"price\": 850.00,\n  \"currency\": \"MXN\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/services/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"services",
+								""
+							]
+						},
+						"description": "Agrega un nuevo servicio al catálogo del Tenant."
+					},
+					"response": []
+				},
+				{
+					"name": "Modificar Servicio (OWNER o ADMIN)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Limpieza Dental Completa + Flúor\",\n  \"description\": \"Limpieza con ultrasonido, pulido y aplicación de flúor protector.\",\n  \"durationMinutes\": 60,\n  \"price\": 1100.00,\n  \"currency\": \"MXN\",\n  \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/services/REEMPLAZAR_CON_UUID_DE_SERVICIO",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"services",
+								"REEMPLAZAR_CON_UUID_DE_SERVICIO"
+							]
+						},
+						"description": "Actualiza detalles del servicio seleccionado."
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Servicios (Cualquier Rol)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/services/?onlyActive=false",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"services",
+								""
+							],
+							"query": [
+								{
+									"key": "onlyActive",
+									"value": "false"
+								}
+							]
+						},
+						"description": "Obtiene la lista completa de servicios del Tenant actual."
+					},
+					"response": []
+				},
+				{
+					"name": "Consultar Detalles de Servicio (Cualquier Rol)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/services/REEMPLAZAR_CON_UUID_DE_SERVICIO",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"services",
+								"REEMPLAZAR_CON_UUID_DE_SERVICIO"
+							]
+						},
+						"description": "Obtiene los detalles de un servicio específico filtrado por scope de Tenant."
+					},
+					"response": []
+				},
+				{
+					"name": "Eliminar Servicio (OWNER o ADMIN)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/services/REEMPLAZAR_CON_UUID_DE_SERVICIO",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"services",
+								"REEMPLAZAR_CON_UUID_DE_SERVICIO"
+							]
+						},
+						"description": "Remueve físicamente el servicio del catálogo."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "4. Gestión de Clientes",
+			"item": [
+				{
+					"name": "Crear Cliente (Cualquier Rol)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone\": \"+5215551234567\",\n  \"name\": \"Maria Lopez\",\n  \"email\": \"maria.lopez@gmail.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/customers/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"customers",
+								""
+							]
+						},
+						"description": "Registra un nuevo cliente bajo el Tenant. Arroja HTTP 409 si el teléfono ya existe en este mismo Tenant."
+					},
+					"response": []
+				},
+				{
+					"name": "Upsert de Cliente (Cualquier Rol - Útil para Webhooks)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone\": \"+5215551234567\",\n  \"name\": \"Maria Lopez de Gomez (Actualizada)\",\n  \"email\": \"maria.lopez.new@gmail.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/customers/upsert",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"customers",
+								"upsert"
+							]
+						},
+						"description": "Crea al cliente si no existe. Si ya existe, actualiza su nombre y correo de forma transparente sin arrojar errores de duplicidad."
+					},
+					"response": []
+				},
+				{
+					"name": "Modificar Cliente (Cualquier Rol)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Maria Lopez Gomez\",\n  \"email\": \"maria.gomez@gmail.com\",\n  \"leadStatus\": \"ACTIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/customers/REEMPLAZAR_CON_UUID_DE_CLIENTE",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"customers",
+								"REEMPLAZAR_CON_UUID_DE_CLIENTE"
+							]
+						},
+						"description": "Actualiza la información y el estado de lead del cliente."
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Clientes (Cualquier Rol)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/customers/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"customers",
+								""
+							]
+						},
+						"description": "Retorna todos los clientes del Tenant ordenados alfabéticamente."
+					},
+					"response": []
+				},
+				{
+					"name": "Consultar Detalles de Cliente (Cualquier Rol)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/customers/REEMPLAZAR_CON_UUID_DE_CLIENTE",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"customers",
+								"REEMPLAZAR_CON_UUID_DE_CLIENTE"
+							]
+						},
+						"description": "Obtiene la ficha del cliente específico."
+					},
+					"response": []
+				},
+				{
+					"name": "Eliminar Cliente (Cualquier Rol)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/customers/REEMPLAZAR_CON_UUID_DE_CLIENTE",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"customers",
+								"REEMPLAZAR_CON_UUID_DE_CLIENTE"
+							]
+						},
+						"description": "Elimina físicamente al cliente."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "5. Usuarios de Tenant",
+			"item": [
+				{
+					"name": "Listar Usuarios del Tenant (Cualquier Rol)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/users/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								""
+							]
+						},
+						"description": "Lista todos los usuarios (OWNER, ADMIN, STAFF) que componen el Tenant."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000/api/v1",
+			"type": "string"
+		}
+	]
+}
