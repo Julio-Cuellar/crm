@@ -17,6 +17,8 @@ from scratch.flow_tests.step_6_staff_login import run_staff_login_and_logout_ste
 from scratch.flow_tests.step_7_exceptions import run_exceptions_step
 from scratch.flow_tests.step_8_logout import run_logout_step
 from scratch.flow_tests.step_9_services_crud import run_services_crud_step
+from scratch.flow_tests.step_10_customers_crud import run_customers_crud_step
+from scratch.flow_tests.step_11_isolation import run_isolation_tests_step
 
 
 async def main():
@@ -100,6 +102,15 @@ async def main():
         owner_headers=owner_headers,
         staff_headers=staff_headers
     )
+
+    # PASO 10: Ejecutar pruebas de CRUD de clientes y operaciones de Upsert
+    await run_customers_crud_step(
+        owner_headers=owner_headers,
+        staff_headers=staff_headers
+    )
+
+    # PASO 11: Ejecutar pruebas de aislamiento Multi-Tenant con 3 clínicas
+    await run_isolation_tests_step()
 
     # PASO 8: Cierre de sesión real en servidor (Logout) para STAFF
     print("\n[Logout] Cerrando sesión del STAFF...")

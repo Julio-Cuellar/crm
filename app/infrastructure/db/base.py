@@ -8,3 +8,4 @@ from app.infrastructure.db.models.pending_registration import PendingRegistratio
 from app.infrastructure.db.models.invitation import Invitation  # noqa: F401
 from app.infrastructure.db.models.blacklisted_token import BlacklistedToken  # noqa: F401
 from app.infrastructure.db.models.service import Service  # noqa: F401
+from app.infrastructure.db.models.customer import Customer  # noqa: F401
