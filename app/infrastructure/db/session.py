@@ -18,15 +18,11 @@ async_session_factory = async_sessionmaker(
 
 async def init_db():
     # Importamos app.infrastructure.db.base para asegurarnos de que todos los modelos 
-    # estén registrados en Base.metadata antes de ejecutar el create-drop
+    # estén registrados en Base.metadata antes de ejecutar el create
     import app.infrastructure.db.base  # noqa: F401
 
     async with engine.begin() as conn:
-        print("[DB] Eliminando tabla legacy 'user' si existe...")
-        await conn.execute(text("DROP TABLE IF EXISTS \"user\" CASCADE;"))
-        print("[DB] Ejecutando DROP ALL de tablas...")
-        await conn.run_sync(Base.metadata.drop_all)
-        print("[DB] Ejecutando CREATE ALL de tablas...")
+        print("[DB] Ejecutando CREATE ALL de tablas (conservando datos existentes)...")
         await conn.run_sync(Base.metadata.create_all)
         print("[DB] Base de datos inicializada correctamente.")
 

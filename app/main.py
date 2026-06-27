@@ -11,6 +11,7 @@ from app.interfaces.api.routers.auth import router as auth_router
 from app.interfaces.api.routers.services import router as services_router
 from app.interfaces.api.routers.customers import router as customers_router
 from app.interfaces.api.routers.dashboard import router as dashboard_router
+from app.interfaces.api.routers.tickets import router as tickets_router
 from app.infrastructure.messaging.rabbitmq_event_bus import RabbitMQEventBus
 from app.infrastructure.messaging.consumers.tenant_created_consumer import TenantCreatedConsumer
 
@@ -87,6 +88,7 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(services_router, prefix="/api/v1")
 app.include_router(customers_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
+app.include_router(tickets_router, prefix="/api/v1")
 
 
 @app.get("/")
