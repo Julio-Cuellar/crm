@@ -10,3 +10,4 @@ from app.infrastructure.db.models.blacklisted_token import BlacklistedToken  # n
 from app.infrastructure.db.models.service import Service  # noqa: F401
 from app.infrastructure.db.models.customer import Customer  # noqa: F401
 from app.infrastructure.db.models.ticket import Ticket  # noqa: F401
+from app.infrastructure.db.models.tenant_credential import TenantCredential  # noqa: F401

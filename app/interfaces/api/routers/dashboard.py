@@ -6,7 +6,6 @@ from app.interfaces.api.dependencies.tenants import get_tenant_repository
 from app.domain.exceptions.base import AppException
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timezone
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -40,14 +39,6 @@ class ReminderItem(BaseModel):
     status: str  # "sent", "failed", "pending"
     error_message: Optional[str] = None
 
-class DashboardServicesResponse(BaseModel):
-    mode: str = "SERVICES"
-    kpis: List[KPIModel]
-    appointments: List[AppointmentItem]
-    bot_activity: List[BotActivityItem]
-    reminders: List[ReminderItem]
-    has_failed_reminders: bool
-
 # Esquemas para Modo Ventas
 class PipelineStageSummary(BaseModel):
     stage: str  # "Nuevo", "Contactado", "Propuesta", "Ganado", "Perdido"
@@ -63,17 +54,40 @@ class FollowupItem(BaseModel):
     urgency: str  # "ok", "warm", "hot"
     platform: str  # "whatsapp", "instagram"
 
+class TeamMemberSummary(BaseModel):
+    id: str
+    name: str
+    role: str  # "AGENT" | "REP"
+    channel: Optional[str] = None
+    appointments_today: Optional[int] = None
+    leads_active: Optional[int] = None
+    pipeline_value: Optional[float] = None
+    followups_due: Optional[int] = None
+    messages_today: int = 0
+    status: str = "active"  # "active" | "idle"
+
+class DashboardServicesResponse(BaseModel):
+    mode: str = "SERVICES"
+    kpis: List[KPIModel]
+    appointments: List[AppointmentItem]
+    bot_activity: List[BotActivityItem]
+    reminders: List[ReminderItem]
+    has_failed_reminders: bool
+    team_summary: Optional[List[TeamMemberSummary]] = None
+
 class DashboardSalesResponse(BaseModel):
     mode: str = "SALES"
     kpis: List[KPIModel]
     pipeline_summary: List[PipelineStageSummary]
     followups: List[FollowupItem]
     bot_activity: List[BotActivityItem]
+    team_summary: Optional[List[TeamMemberSummary]] = None
 
 
 @router.get("/stats")
 async def get_dashboard_stats(
     mode: Optional[str] = None,
+    account_type: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     tenant_repo: SQLAlchemyTenantRepository = Depends(get_tenant_repository)
 ):
@@ -86,8 +100,25 @@ async def get_dashboard_stats(
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
 
-        # Usar el modo del query param si viene especificado, sino usar el del tenant
+        # Usar los params del query si vienen, sino los del tenant
         active_mode = mode.upper() if mode else tenant.mode
+        active_account_type = account_type.upper() if account_type else tenant.account_type
+
+        # Datos de equipo para BUSINESS y TEAM
+        team_summary = None
+        if active_account_type in ("BUSINESS", "TEAM") and active_mode == "SERVICES":
+            team_summary = [
+                TeamMemberSummary(id="a1", name="Laura Suárez", role="AGENT", appointments_today=6, messages_today=22, followups_due=0, status="active"),
+                TeamMemberSummary(id="a2", name="Dr. García", role="AGENT", appointments_today=8, messages_today=15, followups_due=1, status="active"),
+                TeamMemberSummary(id="a3", name="Recepción", role="AGENT", appointments_today=4, messages_today=31, followups_due=0, status="idle"),
+            ]
+        elif active_account_type in ("BUSINESS", "TEAM") and active_mode == "SALES":
+            channel_prefix = "+54 9 11" if active_account_type == "TEAM" else None
+            team_summary = [
+                TeamMemberSummary(id="r1", name="Carlos Méndez", role="REP", channel=f"{channel_prefix} 4567-8901" if channel_prefix else None, leads_active=8, pipeline_value=14500.0, followups_due=2, messages_today=12, status="active"),
+                TeamMemberSummary(id="r2", name="Ana Prieto", role="REP", channel=f"{channel_prefix} 2345-6789" if channel_prefix else None, leads_active=5, pipeline_value=9800.0, followups_due=0, messages_today=7, status="active"),
+                TeamMemberSummary(id="r3", name="Lucas Torres", role="REP", channel=f"{channel_prefix} 8765-4321" if channel_prefix else None, leads_active=12, pipeline_value=22100.0, followups_due=3, messages_today=18, status="active"),
+            ]
 
         if active_mode == "SERVICES":
             kpis = [
@@ -127,7 +158,8 @@ async def get_dashboard_stats(
                 appointments=appointments,
                 bot_activity=bot_activity,
                 reminders=reminders,
-                has_failed_reminders=True
+                has_failed_reminders=True,
+                team_summary=team_summary
             )
         else:
             kpis = [
@@ -164,7 +196,8 @@ async def get_dashboard_stats(
                 kpis=kpis,
                 pipeline_summary=pipeline_summary,
                 followups=followups,
-                bot_activity=bot_activity
+                bot_activity=bot_activity,
+                team_summary=team_summary
             )
 
     except AppException as e:

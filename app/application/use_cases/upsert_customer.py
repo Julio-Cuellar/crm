@@ -1,6 +1,14 @@
+import re
 import uuid
 from app.domain.entities.customer import Customer
 from app.domain.ports.customer_repository import CustomerRepository
+
+
+def _normalize_phone(phone: str) -> str:
+    digits = re.sub(r"\D", "", phone or "")
+    if digits:
+        return f"+{digits}"
+    return phone.strip()
 
 
 class UpsertCustomerUseCase:
@@ -14,7 +22,7 @@ class UpsertCustomerUseCase:
         name: str,
         email: str | None = None
     ) -> Customer:
-        phone_clean = phone.strip()
+        phone_clean = _normalize_phone(phone)
         customer = await self.customer_repository.get_by_phone_and_tenant(phone_clean, tenant_id)
         
         if customer:

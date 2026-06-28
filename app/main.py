@@ -12,20 +12,27 @@ from app.interfaces.api.routers.services import router as services_router
 from app.interfaces.api.routers.customers import router as customers_router
 from app.interfaces.api.routers.dashboard import router as dashboard_router
 from app.interfaces.api.routers.tickets import router as tickets_router
+from app.interfaces.api.routers.chats import router as chats_router
+from app.interfaces.api.routers.bridge import router as bridge_router
+from app.interfaces.api.routers.ws import router as ws_router
 from app.infrastructure.messaging.rabbitmq_event_bus import RabbitMQEventBus
 from app.infrastructure.messaging.consumers.tenant_created_consumer import TenantCreatedConsumer
+from app.infrastructure.db.mongo.mongo_client import mongo_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. Inicializar Base de Datos en modo de desarrollo
     if settings.ENVIRONMENT == "development":
-        print("[Lifespan] Inicializando base de datos en modo de desarrollo (Create-Drop)...")
+        print("[Lifespan] Inicializando base de datos en modo de desarrollo (Persistencia Activa)...")
         try:
-            await init_db()
+            await init_db(force_drop=False)
         except Exception as e:
             print(f"[Lifespan Error] No se pudo inicializar la base de datos: {e}")
             raise e
+
+    # 1.1. Inicializar MongoDB
+    await mongo_client.connect()
 
     # 2. Inicializar RabbitMQ Event Bus de forma robusta
     print("[Lifespan] Conectando a RabbitMQ...")
@@ -48,6 +55,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # 3. Cerrar conexiones al apagar el servidor
+    await mongo_client.disconnect()
     if app.state.tenant_created_consumer:
         await app.state.tenant_created_consumer.stop()
     if app.state.event_bus:
@@ -89,6 +97,9 @@ app.include_router(services_router, prefix="/api/v1")
 app.include_router(customers_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(tickets_router, prefix="/api/v1")
+app.include_router(bridge_router, prefix="/api/v1")
+app.include_router(chats_router, prefix="/api/v1")
+app.include_router(ws_router, prefix="/api/v1")
 
 
 @app.get("/")

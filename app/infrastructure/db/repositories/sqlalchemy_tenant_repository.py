@@ -18,6 +18,8 @@ class SQLAlchemyTenantRepository(TenantRepository):
             phone_number_id=db_tenant.phone_number_id,
             timezone=db_tenant.timezone,
             locale=db_tenant.locale,
+            mode=db_tenant.mode,
+            account_type=db_tenant.account_type,
             is_active=db_tenant.is_active,
             created_at=db_tenant.created_at,
             updated_at=db_tenant.updated_at
@@ -31,6 +33,8 @@ class SQLAlchemyTenantRepository(TenantRepository):
             phone_number_id=domain_tenant.phone_number_id,
             timezone=domain_tenant.timezone,
             locale=domain_tenant.locale,
+            mode=domain_tenant.mode,
+            account_type=domain_tenant.account_type,
             is_active=domain_tenant.is_active,
             created_at=domain_tenant.created_at,
             updated_at=domain_tenant.updated_at
@@ -45,6 +49,8 @@ class SQLAlchemyTenantRepository(TenantRepository):
             db_tenant.phone_number_id = tenant.phone_number_id
             db_tenant.timezone = tenant.timezone
             db_tenant.locale = tenant.locale
+            db_tenant.mode = tenant.mode
+            db_tenant.account_type = tenant.account_type
             db_tenant.is_active = tenant.is_active
             db_tenant.updated_at = tenant.updated_at
         else:
@@ -52,6 +58,7 @@ class SQLAlchemyTenantRepository(TenantRepository):
             self.session.add(db_tenant)
 
         await self.session.flush()
+        await self.session.refresh(db_tenant)
         return self._to_domain(db_tenant)
 
     async def get_by_id(self, tenant_id: uuid.UUID) -> DomainTenant | None:

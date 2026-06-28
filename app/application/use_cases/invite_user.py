@@ -57,7 +57,7 @@ class InviteUserUseCase:
         # Siempre imprimir en consola el token y URL de aceptación para desarrollo local
         invitation_url = f"http://localhost:5173/invite/{token}"
         print(f"\n[InviteUserUseCase] Invitación generada para {email} (Rol: {role})")
-        print(f"👉 Enlace de Aceptación: {invitation_url}\n")
+        print(f"-> Enlace de Aceptación: {invitation_url}\n")
 
         # 5. Publicar evento para enviar la invitación (ej. vía n8n/SMTP)
         if self.event_bus:
