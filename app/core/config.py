@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     # PostgreSQL
     DATABASE_URL: str = "postgresql+asyncpg://postgres:root@localhost:5432/crm"
 
+    # MongoDB
+    MONGO_URL: str = "mongodb://localhost:27017"
+    MONGO_DB: str = "jchat"
+
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
 
@@ -19,7 +23,7 @@ class Settings(BaseSettings):
 
     # JWT
     JWT_SECRET: str = "supersecretkey"
-    JWT_ACCESS_EXPIRE_MINUTES: int = 60
+    JWT_ACCESS_EXPIRE_MINUTES: float = 60.0
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 
     # n8n
@@ -27,7 +31,9 @@ class Settings(BaseSettings):
     N8N_API_KEY: str = ""
 
     # Meta / WhatsApp
-    META_WEBHOOK_VERIFY_TOKEN: str = ""
+    META_GRAPH_API_BASE_URL: str = "https://graph.facebook.com"
+    META_GRAPH_API_VERSION: str = "v25.0"
+    META_WEBHOOK_VERIFY_TOKEN: str = "dev_verify_token_meta_crm"
     META_APP_SECRET: str = ""
 
     # Invitaciones

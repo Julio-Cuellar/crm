@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 from app.domain.exceptions.base import AppException
-from app.interfaces.api.schemas.auth import RegisterRequest, VerifyRequest, LoginRequest, TokenResponse
+from app.interfaces.api.schemas.auth import RegisterRequest, VerifyRequest, LoginRequest, TokenResponse, RefreshRequest
 from app.interfaces.api.schemas.tenant import TenantResponse
 from app.interfaces.api.schemas.user import UserResponse
 from app.interfaces.api.schemas.invitation import InvitationDetailsResponse, AcceptInvitationRequest
 from app.interfaces.api.dependencies.auth import (
     get_register_tenant_use_case,
     get_verify_registration_use_case,
-    get_login_use_case
+    get_login_use_case,
+    get_refresh_token_use_case
 )
 from app.interfaces.api.dependencies.invitations import (
     get_get_invitation_by_token_use_case,
@@ -19,6 +20,7 @@ from app.interfaces.api.dependencies.auth_bearer import get_current_user, securi
 from app.application.use_cases.register_tenant import RegisterTenantUseCase
 from app.application.use_cases.verify_registration import VerifyRegistrationUseCase
 from app.application.use_cases.login import LoginUseCase
+from app.application.use_cases.refresh_token import RefreshTokenUseCase
 from app.application.use_cases.get_invitation_by_token import GetInvitationByTokenUseCase
 from app.application.use_cases.accept_invitation import AcceptInvitationUseCase
 from app.application.use_cases.logout import LogoutUseCase
@@ -147,5 +149,24 @@ async def accept_invitation(
             password=accept_in.password
         )
         return user
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail={"code": e.code, "message": e.message})
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    refresh_in: RefreshRequest,
+    use_case: RefreshTokenUseCase = Depends(get_refresh_token_use_case)
+):
+    """
+    Refresca el Access Token JWT y genera un nuevo Refresh Token usando un Refresh Token válido.
+    """
+    try:
+        access_token, refresh_token = await use_case.execute(refresh_in.refresh_token)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer"
+        )
     except AppException as e:
         raise HTTPException(status_code=e.status_code, detail={"code": e.code, "message": e.message})

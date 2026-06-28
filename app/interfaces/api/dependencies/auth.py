@@ -26,6 +26,8 @@ async def get_register_tenant_use_case(
     return RegisterTenantUseCase(user_repo, pending_repo, event_bus)
 
 
+from app.application.use_cases.refresh_token import RefreshTokenUseCase
+
 async def get_verify_registration_use_case(
     pending_repo: SQLAlchemyPendingRegistrationRepository = Depends(get_pending_registration_repository),
     create_tenant_use_case: CreateTenantUseCase = Depends(get_create_tenant_use_case)
@@ -37,3 +39,9 @@ async def get_login_use_case(
     user_repo: SQLAlchemyUserRepository = Depends(get_user_repository)
 ) -> LoginUseCase:
     return LoginUseCase(user_repo)
+
+
+async def get_refresh_token_use_case(
+    user_repo: SQLAlchemyUserRepository = Depends(get_user_repository)
+) -> RefreshTokenUseCase:
+    return RefreshTokenUseCase(user_repo)

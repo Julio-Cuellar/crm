@@ -8,6 +8,9 @@ from app.application.use_cases.get_tenant import GetTenantUseCase
 from app.application.use_cases.update_tenant import UpdateTenantUseCase
 
 
+from app.interfaces.api.dependencies.users import get_user_repository
+from app.infrastructure.db.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
+
 async def get_tenant_repository(db: AsyncSession = Depends(get_db)) -> SQLAlchemyTenantRepository:
     return SQLAlchemyTenantRepository(db)
 
@@ -18,9 +21,10 @@ async def get_event_bus(request: Request) -> EventBus:
 
 async def get_create_tenant_use_case(
     repo: SQLAlchemyTenantRepository = Depends(get_tenant_repository),
-    event_bus: EventBus = Depends(get_event_bus)
+    event_bus: EventBus = Depends(get_event_bus),
+    user_repo: SQLAlchemyUserRepository = Depends(get_user_repository)
 ) -> CreateTenantUseCase:
-    return CreateTenantUseCase(repo, event_bus)
+    return CreateTenantUseCase(repo, event_bus, user_repo)
 
 
 async def get_get_tenant_use_case(

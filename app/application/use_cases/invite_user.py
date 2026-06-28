@@ -54,6 +54,11 @@ class InviteUserUseCase:
         tenant = await self.tenant_repo.get_by_id(tenant_id)
         tenant_name = tenant.name if tenant else "JChat CRM Tenant"
 
+        # Siempre imprimir en consola el token y URL de aceptación para desarrollo local
+        invitation_url = f"http://localhost:5173/invite/{token}"
+        print(f"\n[InviteUserUseCase] Invitación generada para {email} (Rol: {role})")
+        print(f"-> Enlace de Aceptación: {invitation_url}\n")
+
         # 5. Publicar evento para enviar la invitación (ej. vía n8n/SMTP)
         if self.event_bus:
             payload = {
@@ -65,7 +70,5 @@ class InviteUserUseCase:
                 "expiresAt": saved_invitation.expires_at.isoformat()
             }
             await self.event_bus.publish("user.invitation_requested", payload)
-        else:
-            print(f"[InviteUserUseCase] EventBus no disponible. Invitación creada para {email} con Token: {token}")
 
         return saved_invitation
