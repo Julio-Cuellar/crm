@@ -1,13 +1,31 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.interfaces.api.dependencies.auth_bearer import get_current_user
 from app.domain.entities.user import User
 from app.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
+from app.infrastructure.db.repositories.sqlalchemy_customer_repository import SQLAlchemyCustomerRepository
+from app.infrastructure.db.session import get_db
 from app.interfaces.api.dependencies.tenants import get_tenant_repository
 from app.domain.exceptions.base import AppException
 from pydantic import BaseModel
 from typing import List, Optional
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+
+PIPELINE_STAGE_LABELS = {
+    "NEW": "Nuevo",
+    "CONTACTED": "Contactado",
+    "PROPOSAL": "Propuesta",
+    "WON": "Ganado",
+    "LOST": "Perdido",
+}
+PIPELINE_STAGE_COLORS = {
+    "NEW": "#818cf8",
+    "CONTACTED": "#38bdf8",
+    "PROPOSAL": "#fb923c",
+    "WON": "#4ade80",
+    "LOST": "#71717a",
+}
 
 # Esquemas de Pydantic para el Dashboard
 class KPIModel(BaseModel):
@@ -89,7 +107,8 @@ async def get_dashboard_stats(
     mode: Optional[str] = None,
     account_type: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    tenant_repo: SQLAlchemyTenantRepository = Depends(get_tenant_repository)
+    tenant_repo: SQLAlchemyTenantRepository = Depends(get_tenant_repository),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Retorna las estadísticas unificadas del dashboard principal basadas en el modo de operación del tenant.
@@ -169,12 +188,24 @@ async def get_dashboard_stats(
                 KPIModel(label="Follow-ups hoy", value="8", delta="3 vencidos", direction="down", is_alert=True)
             ]
 
+            customer_repo = SQLAlchemyCustomerRepository(db)
+            customers = await customer_repo.get_by_tenant(current_user.tenant_id)
+
+            stage_counts = {stage: 0 for stage in PIPELINE_STAGE_LABELS}
+            stage_values = {stage: 0.0 for stage in PIPELINE_STAGE_LABELS}
+            for customer in customers:
+                stage = customer.pipeline_stage if customer.pipeline_stage in PIPELINE_STAGE_LABELS else "NEW"
+                stage_counts[stage] += 1
+                stage_values[stage] += customer.deal_value or 0.0
+
             pipeline_summary = [
-                PipelineStageSummary(stage="Nuevo", count=12, value=12000.0, color="#818cf8"),
-                PipelineStageSummary(stage="Contactado", count=8, value=16000.0, color="#38bdf8"),
-                PipelineStageSummary(stage="Propuesta", count=6, value=17200.0, color="#fb923c"),
-                PipelineStageSummary(stage="Ganado", count=5, value=15000.0, color="#4ade80"),
-                PipelineStageSummary(stage="Perdido", count=3, value=6000.0, color="#71717a")
+                PipelineStageSummary(
+                    stage=PIPELINE_STAGE_LABELS[stage],
+                    count=stage_counts[stage],
+                    value=stage_values[stage],
+                    color=PIPELINE_STAGE_COLORS[stage]
+                )
+                for stage in PIPELINE_STAGE_LABELS
             ]
 
             followups = [

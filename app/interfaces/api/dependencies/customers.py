@@ -5,6 +5,7 @@ from app.infrastructure.db.repositories.sqlalchemy_customer_repository import SQ
 from app.application.use_cases.create_customer import CreateCustomerUseCase
 from app.application.use_cases.upsert_customer import UpsertCustomerUseCase
 from app.application.use_cases.update_customer import UpdateCustomerUseCase
+from app.application.use_cases.update_customer_pipeline import UpdateCustomerPipelineUseCase
 from app.application.use_cases.get_customer import GetCustomerUseCase
 from app.application.use_cases.list_customers import ListCustomersUseCase
 from app.application.use_cases.delete_customer import DeleteCustomerUseCase
@@ -30,6 +31,12 @@ async def get_update_customer_use_case(
     repo: SQLAlchemyCustomerRepository = Depends(get_customer_repository)
 ) -> UpdateCustomerUseCase:
     return UpdateCustomerUseCase(repo)
+
+
+async def get_update_customer_pipeline_use_case(
+    repo: SQLAlchemyCustomerRepository = Depends(get_customer_repository)
+) -> UpdateCustomerPipelineUseCase:
+    return UpdateCustomerPipelineUseCase(repo)
 
 
 async def get_get_customer_use_case(

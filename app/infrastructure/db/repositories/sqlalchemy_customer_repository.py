@@ -18,6 +18,8 @@ class SQLAlchemyCustomerRepository(CustomerRepository):
             name=db_customer.name,
             email=db_customer.email,
             lead_status=db_customer.lead_status,
+            pipeline_stage=db_customer.pipeline_stage,
+            deal_value=db_customer.deal_value,
             created_at=db_customer.created_at,
             updated_at=db_customer.updated_at
         )
@@ -30,6 +32,8 @@ class SQLAlchemyCustomerRepository(CustomerRepository):
             name=domain_customer.name,
             email=domain_customer.email,
             lead_status=domain_customer.lead_status,
+            pipeline_stage=domain_customer.pipeline_stage,
+            deal_value=domain_customer.deal_value,
             created_at=domain_customer.created_at,
             updated_at=domain_customer.updated_at
         )
@@ -41,6 +45,8 @@ class SQLAlchemyCustomerRepository(CustomerRepository):
             db_customer.name = customer.name
             db_customer.email = customer.email
             db_customer.lead_status = customer.lead_status
+            db_customer.pipeline_stage = customer.pipeline_stage
+            db_customer.deal_value = customer.deal_value
             db_customer.updated_at = customer.updated_at
         else:
             db_customer = self._to_db(customer)

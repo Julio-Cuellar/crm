@@ -41,5 +41,17 @@ class CustomerResponse(CustomerBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
     lead_status: str
+    pipeline_stage: str
+    deal_value: float | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class CustomerPipelineUpdate(BaseModel):
+    pipeline_stage: str = Field(..., pattern="^(NEW|CONTACTED|PROPOSAL|WON|LOST)$")
+    deal_value: float | None = Field(None, ge=0)
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
