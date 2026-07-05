@@ -18,7 +18,9 @@ from app.infrastructure.messaging.whatsapp_cloud_api import (
     send_whatsapp_message,
 )
 from app.interfaces.api.dependencies.auth_bearer import get_current_user
-from app.interfaces.api.schemas.chat import ChatResponse, MessageResponse, SendMessageRequest
+from app.interfaces.api.schemas.chat import ChatResponse, MessageResponse, SendMessageRequest, ChatModeUpdateRequest
+from app.infrastructure.db.repositories.sqlalchemy_bot_session_repository import SQLAlchemyBotSessionRepository
+from app.infrastructure.websocket.manager import ws_manager
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
@@ -142,7 +144,59 @@ async def list_chats(
     mongo_repo = MongoChatHistoryRepository()
     raw_chats = await mongo_repo.list_chats_by_tenant(tenant_id)
 
-    customer_repo = SQLAlchemyCustomerRepository(db)
+    # 1. Obtener los IDs de cliente únicos
+    customer_ids = []
+    for rc in raw_chats:
+        cid = rc.get("customerId")
+        if cid:
+            try:
+                customer_ids.append(uuid.UUID(str(cid)))
+            except ValueError:
+                continue
+
+    # 2. Cargar Customers en bloque
+    from app.infrastructure.db.models.customer import Customer as DbCustomer
+    from app.infrastructure.db.models.bot_session import BotSession as DbBotSession
+    from sqlalchemy import select
+
+    customers_map = {}
+    if customer_ids:
+        stmt_cust = select(DbCustomer).where(DbCustomer.id.in_(customer_ids))
+        res_cust = await db.execute(stmt_cust)
+        customers_map = {c.id: c for c in res_cust.scalars().all()}
+
+    # 3. Cargar BotSessions en bloque
+    phones = [c.phone for c in customers_map.values()]
+    bot_sessions_map = {}
+    if phones:
+        stmt_bot = select(DbBotSession).where(
+            DbBotSession.tenant_id == tenant_id, 
+            DbBotSession.customer_phone.in_(phones)
+        )
+        res_bot = await db.execute(stmt_bot)
+        bot_sessions_map = {b.customer_phone: b for b in res_bot.scalars().all()}
+
+    # 4. Obtener último mensaje para preview
+    from app.infrastructure.db.mongo.mongo_client import mongo_client
+    from datetime import datetime
+
+    chat_ids = [str(rc["_id"]) for rc in raw_chats]
+    last_messages_map = {}
+    if chat_ids:
+        db_mongo = mongo_client.db
+        pipeline = [
+            {"$match": {"historyChatId": {"$in": chat_ids}}},
+            {"$sort": {"sentAt": -1}},
+            {"$group": {
+                "_id": "$historyChatId",
+                "content": {"$first": "$content"},
+                "type": {"$first": "$type"},
+                "sentAt": {"$first": "$sentAt"}
+            }}
+        ]
+        cursor = db_mongo.messages.aggregate(pipeline)
+        agg_res = await cursor.to_list(length=len(chat_ids))
+        last_messages_map = {r["_id"]: r for r in agg_res}
 
     chats_list = []
     for raw_chat in raw_chats:
@@ -155,21 +209,40 @@ async def list_chats(
         except ValueError:
             continue
 
-        customer = await customer_repo.get_by_id(customer_id)
+        customer = customers_map.get(customer_id)
         if not customer:
             customer_name = "Cliente Desconocido"
             customer_phone = "Desconocido"
+            customer_email = None
+            lead_status = "NEW"
+            automation_mode = "AUTOMATED"
         else:
             customer_name = customer.name
             customer_phone = customer.phone
+            customer_email = customer.email
+            lead_status = customer.lead_status
+            
+            # Obtener el modo de la sesión
+            bot_session = bot_sessions_map.get(customer.phone)
+            automation_mode = bot_session.automation_mode if bot_session else "AUTOMATED"
+
+        chat_id_str = str(raw_chat["_id"])
+        last_msg = last_messages_map.get(chat_id_str)
+        last_message_preview = last_msg.get("content")[:80] if last_msg and last_msg.get("content") else None
+        last_message_type = last_msg.get("type") if last_msg else None
 
         chats_list.append(
             ChatResponse(
-                id=str(raw_chat["_id"]),
+                id=chat_id_str,
                 tenant_id=tenant_id,
                 customer_id=customer_id,
                 customer_name=customer_name,
                 customer_phone=customer_phone,
+                customer_email=customer_email,
+                lead_status=lead_status,
+                automation_mode=automation_mode,
+                last_message_preview=last_message_preview,
+                last_message_type=last_message_type,
                 platform=raw_chat.get("platform", "WHATSAPP"),
                 external_thread_id=raw_chat.get("externalThreadId"),
                 status=raw_chat.get("status", "ACTIVE"),
@@ -321,3 +394,48 @@ async def receive_incoming_message_sim(
         sent_at=msg["sentAt"],
         status=msg["status"],
     )
+
+
+@router.patch("/{customer_id}/mode", response_model=dict)
+async def update_chat_automation_mode(
+    customer_id: uuid.UUID,
+    payload: ChatModeUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = current_user.tenant_id
+
+    customer_repo = SQLAlchemyCustomerRepository(db)
+    customer = await customer_repo.get_by_id(customer_id)
+    if not customer or customer.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado en este Tenant.")
+
+    bot_session_repo = SQLAlchemyBotSessionRepository(db)
+    bot_session = await bot_session_repo.get_by_tenant_and_phone(tenant_id, customer.phone)
+    if not bot_session:
+        from app.domain.entities.bot_session import BotSession as DomainBotSession
+        bot_session = DomainBotSession(
+            tenant_id=tenant_id,
+            customer_phone=customer.phone,
+            automation_mode=payload.mode
+        )
+    else:
+        bot_session.automation_mode = payload.mode
+        
+    await bot_session_repo.save(bot_session)
+
+    # Notificar cambio por WebSocket
+    await ws_manager.broadcast(tenant_id, {
+        "type": "automation_mode_changed",
+        "customerId": str(customer.id),
+        "customerName": customer.name,
+        "mode": payload.mode,
+        "changedBy": "staff"
+    })
+
+    from datetime import datetime
+    return {
+        "customer_id": str(customer.id),
+        "automation_mode": payload.mode,
+        "updated_at": datetime.now().isoformat()
+    }

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 TENANT_MODES = {"SERVICES", "SALES"}
@@ -15,6 +15,20 @@ class TenantBase(BaseModel):
     locale: str = Field("es", max_length=10)
     mode: str = Field("SERVICES", pattern="^(SERVICES|SALES)$")
     account_type: str = Field("INDIVIDUAL", pattern="^(INDIVIDUAL|BUSINESS|TEAM)$")
+    # None = "no modificar los módulos habilitados actuales" (ver UpdateTenantUseCase/Tenant.update_settings)
+    enabled_modules: list[str] | None = Field(None)
+
+    @field_validator("enabled_modules")
+    @classmethod
+    def _validate_enabled_modules(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        if not value:
+            raise ValueError("enabled_modules no puede estar vacío")
+        invalid = set(value) - TENANT_MODES
+        if invalid:
+            raise ValueError(f"Módulos inválidos: {invalid}. Valores permitidos: {TENANT_MODES}")
+        return value
 
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -36,8 +50,30 @@ class TenantUpdate(TenantBase):
 class TenantResponse(TenantBase):
     id: uuid.UUID
     is_active: bool
+    ai_system_prompt: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class TenantAIConfigUpdate(BaseModel):
+    system_prompt: str | None = Field(None, description="System prompt for the Gemini AI assistant")
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
+
+
+class TenantAIConfigResponse(BaseModel):
+    tenant_id: uuid.UUID
+    system_prompt: str | None = None
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        from_attributes=True
+    )
 
 
 class WhatsAppConfigResponse(BaseModel):

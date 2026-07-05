@@ -11,3 +11,6 @@ from app.infrastructure.db.models.service import Service  # noqa: F401
 from app.infrastructure.db.models.customer import Customer  # noqa: F401
 from app.infrastructure.db.models.ticket import Ticket  # noqa: F401
 from app.infrastructure.db.models.tenant_credential import TenantCredential  # noqa: F401
+from app.infrastructure.db.models.bot_session import BotSession  # noqa: F401
+from app.infrastructure.db.models.appointment import Appointment  # noqa: F401
+

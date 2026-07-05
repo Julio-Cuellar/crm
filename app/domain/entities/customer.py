@@ -10,7 +10,7 @@ class Customer:
     name: str
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     email: str | None = None
-    lead_status: str = "NEW"  # NEW | ACTIVE | INACTIVE | BLOCKED
+    lead_status: str = "NEW"  # NEW | CONTACTED | APPOINTMENT_SCHEDULED | APPOINTMENT_CONFIRMED | RECURRING_CLIENT | INACTIVE | BLOCKED
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -25,7 +25,15 @@ class Customer:
 
     def change_status(self, status: str) -> None:
         """Modifica el estado de atención o seguimiento del cliente."""
-        valid_statuses = ["NEW", "ACTIVE", "INACTIVE", "BLOCKED"]
+        valid_statuses = [
+            "NEW",
+            "CONTACTED",
+            "APPOINTMENT_SCHEDULED",
+            "APPOINTMENT_CONFIRMED",
+            "RECURRING_CLIENT",
+            "INACTIVE",
+            "BLOCKED",
+        ]
         upper_status = status.upper()
         if upper_status not in valid_statuses:
             raise ValueError(f"Estado de cliente inválido. Debe ser uno de: {valid_statuses}")

@@ -14,7 +14,7 @@ class Customer(Base):
     phone: Mapped[str] = mapped_column(String(20), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    lead_status: Mapped[str] = mapped_column(String(20), default="NEW", nullable=False)  # NEW | ACTIVE | INACTIVE | BLOCKED
+    lead_status: Mapped[str] = mapped_column(String(50), default="NEW", nullable=False)  # NEW | CONTACTED | APPOINTMENT_SCHEDULED | APPOINTMENT_CONFIRMED | RECURRING_CLIENT | INACTIVE | BLOCKED
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
