@@ -9,6 +9,11 @@ class ChatResponse(BaseModel):
     customer_id: uuid.UUID
     customer_name: str
     customer_phone: str
+    customer_email: str | None = None
+    lead_status: str
+    automation_mode: str
+    last_message_preview: str | None = None
+    last_message_type: str | None = None
     platform: str
     external_thread_id: str | None = None
     status: str
@@ -19,6 +24,14 @@ class ChatResponse(BaseModel):
         alias_generator=to_camel,
         populate_by_name=True,
         from_attributes=True
+    )
+
+class ChatModeUpdateRequest(BaseModel):
+    mode: str = Field(..., pattern="^(AUTOMATED|HUMAN)$")
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
     )
 
 class MessageResponse(BaseModel):

@@ -20,7 +20,9 @@ class SQLAlchemyTenantRepository(TenantRepository):
             locale=db_tenant.locale,
             mode=db_tenant.mode,
             account_type=db_tenant.account_type,
+            enabled_modules=db_tenant.enabled_modules or [db_tenant.mode],
             is_active=db_tenant.is_active,
+            ai_system_prompt=db_tenant.ai_system_prompt,
             created_at=db_tenant.created_at,
             updated_at=db_tenant.updated_at
         )
@@ -35,7 +37,9 @@ class SQLAlchemyTenantRepository(TenantRepository):
             locale=domain_tenant.locale,
             mode=domain_tenant.mode,
             account_type=domain_tenant.account_type,
+            enabled_modules=domain_tenant.enabled_modules,
             is_active=domain_tenant.is_active,
+            ai_system_prompt=domain_tenant.ai_system_prompt,
             created_at=domain_tenant.created_at,
             updated_at=domain_tenant.updated_at
         )
@@ -51,7 +55,9 @@ class SQLAlchemyTenantRepository(TenantRepository):
             db_tenant.locale = tenant.locale
             db_tenant.mode = tenant.mode
             db_tenant.account_type = tenant.account_type
+            db_tenant.enabled_modules = tenant.enabled_modules
             db_tenant.is_active = tenant.is_active
+            db_tenant.ai_system_prompt = tenant.ai_system_prompt
             db_tenant.updated_at = tenant.updated_at
         else:
             db_tenant = self._to_db(tenant)

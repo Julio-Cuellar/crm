@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.domain.entities.user import User as DomainUser
 from app.domain.exceptions.base import AppException
 from app.interfaces.api.dependencies.auth_bearer import get_current_user
-from app.interfaces.api.schemas.customer import CustomerCreate, CustomerUpdate, CustomerUpsert, CustomerResponse
+from app.interfaces.api.schemas.customer import CustomerCreate, CustomerUpdate, CustomerUpsert, CustomerResponse, CustomerPipelineUpdate
 from app.interfaces.api.dependencies.customers import (
     get_create_customer_use_case,
     get_upsert_customer_use_case,
     get_update_customer_use_case,
+    get_update_customer_pipeline_use_case,
     get_get_customer_use_case,
     get_list_customers_use_case,
     get_delete_customer_use_case
@@ -15,6 +16,7 @@ from app.interfaces.api.dependencies.customers import (
 from app.application.use_cases.create_customer import CreateCustomerUseCase
 from app.application.use_cases.upsert_customer import UpsertCustomerUseCase
 from app.application.use_cases.update_customer import UpdateCustomerUseCase
+from app.application.use_cases.update_customer_pipeline import UpdateCustomerPipelineUseCase
 from app.application.use_cases.get_customer import GetCustomerUseCase
 from app.application.use_cases.list_customers import ListCustomersUseCase
 from app.application.use_cases.delete_customer import DeleteCustomerUseCase
@@ -97,6 +99,35 @@ async def update_customer(
             name=customer_in.name,
             email=customer_in.email,
             lead_status=customer_in.lead_status
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "VALIDATION_ERROR", "message": str(e)}
+        )
+    except AppException as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"code": e.code, "message": e.message}
+        )
+
+
+@router.patch("/{customer_id}/pipeline", response_model=CustomerResponse)
+async def update_customer_pipeline(
+    customer_id: uuid.UUID,
+    payload: CustomerPipelineUpdate,
+    current_user: DomainUser = Depends(get_current_user),
+    use_case: UpdateCustomerPipelineUseCase = Depends(get_update_customer_pipeline_use_case)
+):
+    """
+    Mueve al cliente a otra etapa del pipeline de ventas y/o actualiza el monto del trato.
+    """
+    try:
+        return await use_case.execute(
+            customer_id=customer_id,
+            tenant_id=current_user.tenant_id,
+            pipeline_stage=payload.pipeline_stage,
+            deal_value=payload.deal_value
         )
     except ValueError as e:
         raise HTTPException(

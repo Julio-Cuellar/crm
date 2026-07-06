@@ -9,17 +9,29 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse, PlainTextResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.use_cases.dispatch_to_bot import DispatchToBotUseCase, load_tenant_agent_prompt
+from app.application.use_cases.handle_bot_reply import HandleBotReplyUseCase
 from app.core.config import settings
 from app.core.security import decrypt_value
 from app.domain.entities.customer import Customer
+from app.domain.entities.bot_session import BotSession as DomainBotSession
 from app.infrastructure.db.repositories.mongo_chat_history_repository import MongoChatHistoryRepository
 from app.infrastructure.db.repositories.sqlalchemy_customer_repository import SQLAlchemyCustomerRepository
 from app.infrastructure.db.repositories.sqlalchemy_tenant_credential_repository import SQLAlchemyTenantCredentialRepository
 from app.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
+from app.infrastructure.db.repositories.sqlalchemy_bot_session_repository import SQLAlchemyBotSessionRepository
+from app.infrastructure.db.repositories.sqlalchemy_appointment_repository import SQLAlchemyAppointmentRepository
+from app.infrastructure.db.repositories.sqlalchemy_service_repository import SQLAlchemyServiceRepository
+from app.infrastructure.db.repositories.redis_conversation_memory_repository import RedisConversationMemoryRepository
 from app.infrastructure.db.session import get_db
+from app.infrastructure.n8n.n8n_bot_gateway import N8nBotGateway
 from app.infrastructure.websocket.manager import ws_manager
+from app.interfaces.api.schemas.bot import BotReplyRequest
+from datetime import datetime, timedelta
+
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +166,10 @@ def _extract_first_phone_number_id(payload: Mapping[str, Any]) -> str:
     return ""
 
 
+class EscalateRequest(BaseModel):
+    reason: str | None = None
+
+
 async def _find_or_create_customer(
     customer_repo: SQLAlchemyCustomerRepository,
     *,
@@ -181,10 +197,12 @@ async def _find_or_create_customer(
 async def _handle_inbound_message(
     *,
     tenant_id: UUID,
+    phone_number_id: str,
     customer_repo: SQLAlchemyCustomerRepository,
     mongo_repo: MongoChatHistoryRepository,
     message: Mapping[str, Any],
     contacts_by_wa_id: dict[str, Mapping[str, Any]],
+    db: AsyncSession,
 ) -> None:
     from_number = str(message.get("from") or "").strip()
     if not from_number:
@@ -199,6 +217,25 @@ async def _handle_inbound_message(
         phone=from_number,
         name=customer_name,
     )
+
+    # Buscar o crear la sesión de bot para el cliente
+    bot_session_repo = SQLAlchemyBotSessionRepository(db)
+    bot_session = await bot_session_repo.get_by_tenant_and_phone(tenant_id, customer.phone)
+    if not bot_session:
+        bot_session = DomainBotSession(
+            tenant_id=tenant_id,
+            customer_phone=customer.phone,
+            automation_mode="AUTOMATED"
+        )
+        bot_session = await bot_session_repo.save(bot_session)
+
+    # Actualizar estado de cliente nuevo a CONTACTED automáticamente
+    if customer.lead_status == "NEW":
+        try:
+            customer.change_status("CONTACTED")
+            await customer_repo.save(customer)
+        except Exception as e:
+            logger.warning("Error al actualizar lead_status de NEW a CONTACTED: %s", e)
 
     chat = await mongo_repo.get_or_create_chat(
         tenant_id,
@@ -225,6 +262,45 @@ async def _handle_inbound_message(
         "preview": content[:80],
         "lastMessageAt": chat.get("lastMessageAt", ""),
     })
+
+    # Si la sesión del bot está pausada para humanos, omitimos n8n
+    if bot_session.automation_mode == "HUMAN":
+        logger.info("Conversación pausada para humanos. Omitiendo bot.")
+        return
+
+    # Despachar a n8n sin bloquear el webhook de Meta. La respuesta vuelve por
+    # POST /bridge/n8n/reply, donde se envía WhatsApp y se ejecutan acciones.
+    if settings.BOT_ENABLED_DEFAULT and content:
+        try:
+            tenant_repo = SQLAlchemyTenantRepository(db)
+            tenant = await tenant_repo.get_by_id(tenant_id)
+            if not tenant:
+                logger.warning("No se pudo despachar bot: tenant no encontrado %s", tenant_id)
+                return
+
+            memory_repo = RedisConversationMemoryRepository()
+            if bot_session.context_json:
+                await memory_repo.merge_state(chat["_id"], bot_session.context_json)
+
+            dispatch_uc = DispatchToBotUseCase(
+                bot_gateway=N8nBotGateway(),
+                memory_repo=memory_repo,
+                mongo_repo=mongo_repo,
+            )
+            agent_prompt = await load_tenant_agent_prompt(db, tenant_id)
+            await dispatch_uc.execute(
+                tenant=tenant,
+                customer=customer,
+                chat=chat,
+                content=content,
+                message_type=message_type,
+                media_url=media_url,
+                external_id=str(message.get("id") or ""),
+                agent_prompt=agent_prompt,
+            )
+        except Exception as exc:  # noqa: BLE001 - el bot no debe tumbar la recepcion
+            logger.warning("No se pudo despachar el mensaje al bot: %s", exc)
+
 
 
 async def _handle_status_update(
@@ -339,10 +415,12 @@ async def receive_webhook(
                     continue
                 await _handle_inbound_message(
                     tenant_id=tenant.id,
+                    phone_number_id=phone_number_id,
                     customer_repo=customer_repo,
                     mongo_repo=mongo_repo,
                     message=message,
                     contacts_by_wa_id=contacts_by_wa_id,
+                    db=db,
                 )
                 processed_messages += 1
 
@@ -358,4 +436,126 @@ async def receive_webhook(
         "status": "ok",
         "processedMessages": processed_messages,
         "processedStatuses": processed_statuses,
+    }
+
+
+@router.post("/n8n/reply")
+async def receive_bot_reply(
+    reply: BotReplyRequest,
+    db: AsyncSession = Depends(get_db),
+    x_callback_secret: str | None = Header(default=None, alias="X-Callback-Secret"),
+):
+    """Callback de n8n: entrega la respuesta del bot para enviarla al cliente."""
+    if settings.N8N_CALLBACK_SECRET:
+        if not x_callback_secret or not hmac.compare_digest(
+            x_callback_secret, settings.N8N_CALLBACK_SECRET
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Callback no autorizado.")
+
+    use_case = HandleBotReplyUseCase(memory_repo=RedisConversationMemoryRepository())
+    return await use_case.execute(db=db, reply=reply)
+
+
+@router.get("/tenants/{tenant_id}/availability")
+async def get_tenant_availability(
+    tenant_id: UUID,
+    start_date: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    x_bridge_token: str | None = Header(default=None, alias="X-Bridge-Token"),
+):
+    """
+    Endpoint seguro para que n8n consulte la disponibilidad de citas y servicios de un tenant.
+    Requiere cabecera 'X-Bridge-Token' coincidente con el SECRET_KEY del sistema.
+    """
+    expected_token = settings.SECRET_KEY
+    if expected_token and x_bridge_token != expected_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
+
+    now = datetime.now()
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Formato de fecha inválido. Usar YYYY-MM-DD")
+    else:
+        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Consultamos disponibilidad para los próximos 7 días
+    end_dt = start_dt + timedelta(days=7)
+
+    appt_repo = SQLAlchemyAppointmentRepository(db)
+    appointments = await appt_repo.list_by_tenant_and_range(tenant_id, start_dt, end_dt)
+
+    service_repo = SQLAlchemyServiceRepository(db)
+    services = await service_repo.get_by_tenant(tenant_id)
+
+    busy_slots = []
+    for appt in appointments:
+        if appt.status != "CANCELLED":
+            busy_slots.append({
+                "start": appt.start_at.isoformat(),
+                "end": appt.end_at.isoformat(),
+                "status": appt.status
+            })
+
+    services_list = []
+    for s in services:
+        if s.is_active:
+            services_list.append({
+                "id": str(s.id),
+                "name": s.name,
+                "duration_minutes": s.duration_minutes,
+                "price": float(s.price) if s.price else None,
+                "currency": s.currency
+            })
+
+    return {
+        "tenant_id": str(tenant_id),
+        "busy_slots": busy_slots,
+        "services": services_list
+    }
+
+
+@router.post("/chats/{customer_id}/escalate")
+async def escalate_chat_to_human(
+    customer_id: UUID,
+    payload: EscalateRequest,
+    db: AsyncSession = Depends(get_db),
+    x_bridge_token: str | None = Header(default=None, alias="X-Bridge-Token"),
+):
+    expected_token = settings.SECRET_KEY
+    if expected_token and x_bridge_token != expected_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
+
+    customer_repo = SQLAlchemyCustomerRepository(db)
+    customer = await customer_repo.get_by_id(customer_id)
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado.")
+
+    bot_session_repo = SQLAlchemyBotSessionRepository(db)
+    bot_session = await bot_session_repo.get_by_tenant_and_phone(customer.tenant_id, customer.phone)
+    if not bot_session:
+        from app.domain.entities.bot_session import BotSession as DomainBotSession
+        bot_session = DomainBotSession(
+            tenant_id=customer.tenant_id,
+            customer_phone=customer.phone,
+            automation_mode="HUMAN"
+        )
+    else:
+        bot_session.automation_mode = "HUMAN"
+
+    await bot_session_repo.save(bot_session)
+
+    # Notificar a los agentes conectados vía WebSocket
+    await ws_manager.broadcast(customer.tenant_id, {
+        "type": "automation_mode_changed",
+        "customerId": str(customer.id),
+        "customerName": customer.name,
+        "mode": "HUMAN",
+        "changedBy": "workflow"
+    })
+
+    return {
+        "customer_id": str(customer.id),
+        "automation_mode": "HUMAN"
     }

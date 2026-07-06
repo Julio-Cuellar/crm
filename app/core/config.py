@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     # n8n
     N8N_BASE_URL: str = "http://localhost:5678"
     N8N_API_KEY: str = ""
+    N8N_INBOUND_WEBHOOK_PATH: str = "/webhook/consultorio-inbound"
+    N8N_CALLBACK_SECRET: str = ""
+    N8N_BOT_STUB: bool = False
+
+    # Bot / memoria conversacional resumida
+    PUBLIC_BASE_URL: str = "http://localhost:8000"
+    BOT_ENABLED_DEFAULT: bool = True
+    BOT_SUMMARY_REFRESH_EVERY_TURNS: int = 6
+    BOT_RECENT_TURNS: int = 2
 
     # Meta / WhatsApp
     META_GRAPH_API_BASE_URL: str = "https://graph.facebook.com"

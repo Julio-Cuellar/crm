@@ -7,7 +7,7 @@ from app.interfaces.api.dependencies.tenants import (
     get_get_tenant_use_case,
     get_update_tenant_use_case
 )
-from app.interfaces.api.schemas.tenant import TenantUpdate, TenantResponse
+from app.interfaces.api.schemas.tenant import TenantUpdate, TenantResponse, TenantAIConfigUpdate, TenantAIConfigResponse
 
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
@@ -39,6 +39,7 @@ async def update_tenant(
             locale=tenant_in.locale,
             mode=tenant_in.mode,
             account_type=tenant_in.account_type,
+            enabled_modules=tenant_in.enabled_modules,
         )
         return tenant
     except AppException as e:
@@ -122,4 +123,29 @@ async def update_whatsapp_config(
         phone_number_id=tenant.phone_number_id,
         whatsapp_api_token=decrypted_token,
         meta_app_secret=decrypted_secret,
+    )
+
+
+@router.patch("/{tenant_id}/ai-config", response_model=TenantAIConfigResponse)
+async def update_tenant_ai_config(
+    tenant_id: uuid.UUID,
+    config_in: TenantAIConfigUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="No tienes permisos para configurar este negocio.")
+
+    tenant_repo = SQLAlchemyTenantRepository(db)
+    tenant = await tenant_repo.get_by_id(tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Negocio no encontrado.")
+
+    tenant.ai_system_prompt = config_in.system_prompt
+    await tenant_repo.save(tenant)
+
+    return TenantAIConfigResponse(
+        tenant_id=tenant.id,
+        system_prompt=tenant.ai_system_prompt,
+        updated_at=tenant.updated_at
     )

@@ -44,33 +44,28 @@ def make_request(url, data=None, method="GET", headers=None):
 
 
 async def get_verification_token(email: str) -> str | None:
-    async with async_session_factory() as session:
-        repo = SQLAlchemyPendingRegistrationRepository(session)
-        pending = await repo.get_by_email(email)
-        return pending.verification_token if pending else None
-
-
-async def get_invitation_token(email: str) -> str | None:
-    async with async_session_factory() as session:
-        repo = SQLAlchemyInvitationRepository(session)
-        stmt = await session.execute(
-            repo.session.query(repo._to_db.__self__).filter_by(email=email)
-        )
-        db_invite = stmt.scalar_one_or_none()
-        return db_invite.token if db_invite else None
+    for _ in range(15):
+        async with async_session_factory() as session:
+            repo = SQLAlchemyPendingRegistrationRepository(session)
+            pending = await repo.get_by_email(email)
+            if pending and pending.verification_token:
+                return pending.verification_token
+        await asyncio.sleep(0.2)
+    return None
 
 
 async def get_invitation_token_direct(email: str) -> str | None:
-    # Consulta directa de base de datos
-    async with async_session_factory() as session:
-        repo = SQLAlchemyInvitationRepository(session)
-        # Usamos el repo para buscar por token, pero como no tenemos el token, usamos query directo
-        from app.infrastructure.db.models.invitation import Invitation as DbInvitation
-        from sqlalchemy import select
-        stmt = select(DbInvitation).where(DbInvitation.email == email)
-        result = await session.execute(stmt)
-        db_invite = result.scalar_one_or_none()
-        return db_invite.token if db_invite else None
+    for _ in range(15):
+        async with async_session_factory() as session:
+            from app.infrastructure.db.models.invitation import Invitation as DbInvitation
+            from sqlalchemy import select
+            stmt = select(DbInvitation).where(DbInvitation.email == email)
+            result = await session.execute(stmt)
+            db_invite = result.scalar_one_or_none()
+            if db_invite and db_invite.token:
+                return db_invite.token
+        await asyncio.sleep(0.2)
+    return None
 
 
 async def run_complete_flow_test():
@@ -80,7 +75,7 @@ async def run_complete_flow_test():
     
     # 1. Reiniciar la base de datos para asegurar una prueba limpia y aislada
     print("\n[Paso 1] Reiniciando base de datos Postgres (Clean State)...")
-    await init_db()
+    await init_db(force_drop=True)
     print("-> Base de datos limpia.")
 
     # Datos de prueba para el Tenant y el Propietario (OWNER)
@@ -222,6 +217,69 @@ async def run_complete_flow_test():
         print(f"   - {u.get('name')} ({u.get('email')}) - Rol: {u.get('role')}")
     assert status == 200
     assert len(response) == 2, "Deben haber exactamente 2 usuarios (OWNER y STAFF) en el tenant."
+
+    # 15. Configurar WhatsApp (GET/PUT)
+    print("\n[Paso 15] Probando configuración de canal de WhatsApp (GET/PUT)...")
+    # GET inicial
+    status, config = make_request(f"{API_BASE}/tenants/me/whatsapp", method="GET", headers=owner_headers)
+    print(f"-> Configuración de WhatsApp inicial (HTTP {status}): {config}")
+    assert status == 200
+    
+    # PUT para guardar configuración
+    whatsapp_payload = {
+        "phoneNumberId": "123456789012345",
+        "whatsappApiToken": "EAAGkb4L2p98BA...secret_token_here..."
+    }
+    status, config = make_request(f"{API_BASE}/tenants/me/whatsapp", data=whatsapp_payload, method="PUT", headers=owner_headers)
+    print(f"-> Configuración de WhatsApp actualizada (HTTP {status}): {config}")
+    assert status == 200
+    assert config.get("phoneNumberId") == "123456789012345"
+    assert config.get("whatsappApiToken") == "EAAGkb4L2p98BA...secret_token_here..."
+
+    # GET para verificar persistencia y desencripción
+    status, config = make_request(f"{API_BASE}/tenants/me/whatsapp", method="GET", headers=owner_headers)
+    print(f"-> Configuración de WhatsApp verificada (HTTP {status}): {config}")
+    assert status == 200
+    assert config.get("phoneNumberId") == "123456789012345"
+    assert config.get("whatsappApiToken") == "EAAGkb4L2p98BA...secret_token_here..."
+
+    # 16. Crear cliente y probar flujos de chat/mensajes (MongoDB + Postgres)
+    print("\n[Paso 16] Probando flujos de chat e historial de mensajes (Postgres + MongoDB)...")
+    # Crear cliente para chatear
+    customer_payload = {
+        "name": "Julio Cortazar E2E",
+        "phone": "+5491122334455",
+        "email": "julio.e2e@cortazar.com"
+    }
+    status, customer = make_request(f"{API_BASE}/customers/", data=customer_payload, method="POST", headers=owner_headers)
+    print(f"-> Cliente creado (HTTP {status}): {customer}")
+    assert status == 201
+    customer_id = customer.get("id")
+    assert customer_id is not None
+
+    # Enviar mensaje de chat
+    msg_payload = {
+        "content": "Hola Julio, este es un mensaje automatizado desde la prueba E2E."
+    }
+    status, message = make_request(f"{API_BASE}/chats/{customer_id}/messages", data=msg_payload, method="POST", headers=owner_headers)
+    print(f"-> Mensaje enviado y guardado (HTTP {status}): {message}")
+    assert status == 201
+    assert message.get("content") == msg_payload["content"]
+    assert message.get("direction") == "OUTBOUND"
+    
+    # Listar chats activos del tenant
+    status, chats = make_request(f"{API_BASE}/chats", method="GET", headers=owner_headers)
+    print(f"-> Lista de chats del tenant (HTTP {status}): {chats}")
+    assert status == 200
+    assert len(chats) > 0
+    assert chats[0].get("customerName") == "Julio Cortazar E2E"
+    
+    # Obtener historial de mensajes de la conversación
+    status, history = make_request(f"{API_BASE}/chats/{customer_id}/messages", method="GET", headers=owner_headers)
+    print(f"-> Historial de mensajes del chat (HTTP {status}): {history}")
+    assert status == 200
+    assert len(history) > 0
+    assert history[0].get("content") == msg_payload["content"]
 
     # 14. Cierre de sesión (Simulado / Borrado de token cliente)
     print("\n[Paso 14] Simulando cierre de sesión en cliente (descartando tokens)...")

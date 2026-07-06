@@ -1,0 +1,93 @@
+{
+  "name": "JChat Contract - Consultorio (Gemini, prompt per-usuario)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "consultorio-inbound", "responseMode": "onReceived", "options": {} },
+      "id": "bbbbbbbb-0000-0000-0000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 300],
+      "webhookId": "consultorio-inbound-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Adapta el payload del backend (contrato) a lo que espera el Agente.\n// El prompt del sistema es INDIVIDUAL por tenant: viene en body.agent.prompt.\nconst p = $input.first().json.body || $input.first().json;\nconst ctx = p.context || {};\nconst summary = ctx.summary || {};\nconst state = ctx.state || {};\nconst agent = p.agent || {};\nconst systemMessage = agent.prompt || 'Eres un asistente virtual. Responde SIEMPRE en JSON valido.';\nconst conv = p.conversation || {};\nconst parts = [];\nparts.push('Mensaje del cliente: ' + ((p.message && p.message.content) || ''));\nparts.push('Cliente: ' + (conv.customerName || '') + ' (' + (conv.customerPhone || '') + ')');\nif (summary.text) parts.push('Resumen de la conversacion (memoria): ' + summary.text);\nif (state && Object.keys(state).length) parts.push('Estado actual del flujo: ' + JSON.stringify(state));\nconst agentInput = parts.join('\\n');\nreturn [{ json: {\n  systemMessage: systemMessage,\n  agentInput: agentInput,\n  _ctx: {\n    correlationId: p.correlationId,\n    tenantId: (p.business || {}).tenantId,\n    chatId: conv.chatId,\n    customerId: conv.customerId,\n    channel: p.channel,\n    callbackUrl: p.callbackUrl,\n    refreshSummary: !!ctx.refreshSummary,\n    summaryVersion: summary.version || 0,\n    businessName: (p.business || {}).name,\n    message: (p.message && p.message.content) || ''\n  }\n}}];"
+      },
+      "id": "bbbbbbbb-0000-0000-0000-000000000002",
+      "name": "Adaptar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.agentInput }}",
+        "options": { "systemMessage": "={{ $json.systemMessage }}" }
+      },
+      "id": "bbbbbbbb-0000-0000-0000-000000000003",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [640, 260]
+    },
+    {
+      "parameters": { "modelName": "models/gemini-3.1-flash-lite", "options": {} },
+      "id": "bbbbbbbb-0000-0000-0000-000000000004",
+      "name": "Google Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [600, 460],
+      "credentials": { "googlePalmApi": { "id": "REEMPLAZAR", "name": "Gemini account" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsea la salida JSON del Agente (tolerante a fences ```json).\nconst raw = $json.output != null ? $json.output : '';\nconst cleaned = String(raw).replace(/^\\s*```json\\s*/i, '').replace(/^\\s*```\\s*/i, '').replace(/```\\s*$/i, '').trim();\nlet parsed;\ntry { parsed = JSON.parse(cleaned); }\ncatch (e) { parsed = { intent: 'triage', reply: String(raw), nombre: '', correo: '', servicio: '', descripcion: '', fecha_hora: '', folio: '', ticket_correcto: null }; }\nreturn [{ json: parsed }];"
+      },
+      "id": "bbbbbbbb-0000-0000-0000-000000000005",
+      "name": "Parse AI JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mapea la salida del Agente al contrato del backend.\nconst parsed = $json;\nconst ctx = $('Adaptar').first().json._ctx;\nconst intent = parsed.intent || 'triage';\nconst content = parsed.reply || '';\nconst statePatch = { stage: intent };\n['nombre', 'correo', 'servicio', 'descripcion', 'fecha_hora'].forEach(function (k) { if (parsed[k]) statePatch[k] = parsed[k]; });\nconst memory = { summary: null, statePatch: statePatch };\n// Recompactar el resumen solo cuando el backend lo pide.\nif (ctx.refreshSummary) memory.summary = { text: 'Resumen: ' + (parsed.descripcion || ctx.message || ''), version: (ctx.summaryVersion || 0) + 1 };\nconst payload = {\n  correlationId: ctx.correlationId,\n  tenantId: ctx.tenantId,\n  chatId: ctx.chatId,\n  customerId: ctx.customerId,\n  channel: ctx.channel,\n  reply: { type: 'TEXT', content: content, mediaUrl: null },\n  memory: memory,\n  handoff: intent === 'human_escalation'\n};\nreturn [{ json: { callbackUrl: ctx.callbackUrl, payload: payload } }];"
+      },
+      "id": "bbbbbbbb-0000-0000-0000-000000000006",
+      "name": "Construir Reply Contrato",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {}
+      },
+      "id": "bbbbbbbb-0000-0000-0000-000000000007",
+      "name": "HTTP - Callback Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Adaptar", "type": "main", "index": 0 }]] },
+    "Adaptar": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "Google Gemini": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Parse AI JSON", "type": "main", "index": 0 }]] },
+    "Parse AI JSON": { "main": [[{ "node": "Construir Reply Contrato", "type": "main", "index": 0 }]] },
+    "Construir Reply Contrato": { "main": [[{ "node": "HTTP - Callback Backend", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "id": "jchatcontractgemini",
+  "tags": []
+}

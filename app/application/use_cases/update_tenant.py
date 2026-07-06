@@ -18,6 +18,7 @@ class UpdateTenantUseCase:
         locale: str = "es",
         mode: str = "SERVICES",
         account_type: str = "INDIVIDUAL",
+        enabled_modules: list[str] | None = None,
     ) -> Tenant:
         tenant = await self.tenant_repository.get_by_id(tenant_id)
         if not tenant:
@@ -28,7 +29,14 @@ class UpdateTenantUseCase:
             if existing:
                 raise TenantSlugAlreadyExistsException(f"El identificador '{slug}' ya está registrado.")
 
-        tenant.update_settings(name=name, timezone=timezone, locale=locale, mode=mode, account_type=account_type)
+        tenant.update_settings(
+            name=name,
+            timezone=timezone,
+            locale=locale,
+            mode=mode,
+            account_type=account_type,
+            enabled_modules=enabled_modules,
+        )
         tenant.slug = slug
         tenant.phone_number_id = phone_number_id
 
