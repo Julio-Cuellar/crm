@@ -69,6 +69,7 @@ class SQLAlchemyBotSessionRepository(BotSessionRepository):
             self.session.add(db_session)
 
         await self.session.flush()
+        await self.session.refresh(db_session)
         return self._to_domain(db_session)
 
     async def get_by_phone(self, phone: str) -> DomainBotSession | None:
