@@ -4,15 +4,19 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.use_cases.dispatch_to_bot import DispatchToBotUseCase, load_tenant_agent_prompt
+from app.core.config import settings
 from app.core.security import decrypt_value
 from app.domain.entities.user import User
 from app.infrastructure.db.repositories.mongo_chat_history_repository import MongoChatHistoryRepository
+from app.infrastructure.db.repositories.redis_conversation_memory_repository import RedisConversationMemoryRepository
 from app.infrastructure.db.repositories.sqlalchemy_customer_repository import SQLAlchemyCustomerRepository
 from app.infrastructure.db.repositories.sqlalchemy_tenant_credential_repository import (
     SQLAlchemyTenantCredentialRepository,
 )
 from app.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
 from app.infrastructure.db.session import get_db
+from app.infrastructure.n8n.n8n_bot_gateway import N8nBotGateway
 from app.infrastructure.messaging.whatsapp_cloud_api import (
     WhatsAppCloudAPIError,
     send_whatsapp_message,
@@ -382,6 +386,53 @@ async def receive_incoming_message_sim(
         media_url=message_in.media_url,
         status="DELIVERED",
     )
+
+    await ws_manager.broadcast(tenant_id, {
+        "type": "new_message",
+        "customerId": str(customer.id),
+        "customerName": customer.name,
+        "preview": (message_in.content or "")[:80],
+        "lastMessageAt": str(msg.get("sentAt", "")),
+    })
+
+    if settings.BOT_ENABLED_DEFAULT and message_in.content:
+        bot_session_repo = SQLAlchemyBotSessionRepository(db)
+        bot_session = await bot_session_repo.get_by_tenant_and_phone(tenant_id, customer.phone)
+        if bot_session and bot_session.automation_mode == "HUMAN":
+            return MessageResponse(
+                id=str(msg["_id"]),
+                history_chat_id=str(msg["historyChatId"]),
+                direction=msg["direction"],
+                type=msg["type"],
+                content=msg["content"],
+                media_url=msg.get("mediaUrl"),
+                external_id=msg.get("externalId"),
+                sent_at=msg["sentAt"],
+                status=msg["status"],
+            )
+
+        tenant_repo = SQLAlchemyTenantRepository(db)
+        tenant = await tenant_repo.get_by_id(tenant_id)
+        if tenant:
+            memory_repo = RedisConversationMemoryRepository()
+            if bot_session and bot_session.context_json:
+                await memory_repo.merge_state(chat_id, bot_session.context_json)
+
+            dispatch_uc = DispatchToBotUseCase(
+                bot_gateway=N8nBotGateway(),
+                memory_repo=memory_repo,
+                mongo_repo=mongo_repo,
+            )
+            agent_prompt = await load_tenant_agent_prompt(db, tenant_id)
+            await dispatch_uc.execute(
+                tenant=tenant,
+                customer=customer,
+                chat=chat,
+                content=message_in.content,
+                message_type=message_in.type,
+                media_url=message_in.media_url,
+                agent_prompt=agent_prompt,
+            )
 
     return MessageResponse(
         id=str(msg["_id"]),

@@ -1,0 +1,70 @@
+{
+  "name": "JChat Contract TEST",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "consultorio-inbound", "responseMode": "onReceived", "options": {} },
+      "id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "consultorio-inbound-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.first().json.body || $input.first().json;\nconst ctx = p.context || {};\nconst summary = ctx.summary || {};\nconst state = ctx.state || {};\nconst agent = p.agent || {};\nconst systemMessage = agent.prompt || 'Eres un asistente virtual.';\nconst parts = [];\nparts.push('Mensaje del cliente: ' + ((p.message && p.message.content) || ''));\nconst conv = p.conversation || {};\nparts.push('Cliente: ' + (conv.customerName || '') + ' (' + (conv.customerPhone || '') + ')');\nif (summary.text) parts.push('Resumen de la conversacion: ' + summary.text);\nif (state && Object.keys(state).length) parts.push('Estado actual: ' + JSON.stringify(state));\nconst agentInput = parts.join('\\n');\nreturn [{ json: {\n  systemMessage: systemMessage,\n  agentInput: agentInput,\n  _ctx: {\n    correlationId: p.correlationId,\n    tenantId: (p.business || {}).tenantId,\n    chatId: conv.chatId,\n    customerId: conv.customerId,\n    channel: p.channel,\n    callbackUrl: p.callbackUrl,\n    refreshSummary: !!ctx.refreshSummary,\n    summaryVersion: summary.version || 0,\n    businessName: (p.business || {}).name,\n    message: (p.message && p.message.content) || ''\n  }\n}}];"
+      },
+      "id": "aaaaaaaa-0000-0000-0000-000000000002",
+      "name": "Adaptar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sys = $json.systemMessage || '';\nconst inp = ($json.agentInput || '').toLowerCase();\nlet intent = 'triage';\nlet reply;\nif (inp.includes('limpieza') || inp.includes('agendar') || inp.includes('cita')) { intent = 'schedule'; reply = 'Con gusto agendo tu cita. Tengo espacio el jueves 4pm, confirmas?'; }\nelse if (inp.includes('confirmo')) { intent = 'confirm_booking'; reply = 'Listo, tu cita queda confirmada.'; }\nelse { reply = 'Hola, soy tu asistente. En que te ayudo?'; }\n// Prueba de prompt per-user: marca con inicio del systemMessage (incluye nombre del negocio)\nreply += ' [prompt:' + sys.slice(0, 55).replace(/\\n/g, ' ') + ']';\nreturn [{ json: { intent: intent, reply: reply, nombre: '', correo: '', servicio: '', descripcion: inp.slice(0, 40), fecha_hora: '', folio: '', ticket_correcto: null } }];"
+      },
+      "id": "aaaaaaaa-0000-0000-0000-000000000003",
+      "name": "IA Stub",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $json;\nconst ctx = $('Adaptar').first().json._ctx;\nconst intent = parsed.intent || 'triage';\nconst content = parsed.reply || '';\nconst statePatch = { stage: intent };\n['nombre', 'correo', 'servicio', 'descripcion', 'fecha_hora'].forEach(function (k) { if (parsed[k]) statePatch[k] = parsed[k]; });\nconst memory = { summary: null, statePatch: statePatch };\nif (ctx.refreshSummary) memory.summary = { text: 'Resumen: ' + (parsed.descripcion || ctx.message || ''), version: (ctx.summaryVersion || 0) + 1 };\nconst payload = {\n  correlationId: ctx.correlationId,\n  tenantId: ctx.tenantId,\n  chatId: ctx.chatId,\n  customerId: ctx.customerId,\n  channel: ctx.channel,\n  reply: { type: 'TEXT', content: content, mediaUrl: null },\n  memory: memory,\n  handoff: intent === 'human_escalation'\n};\nreturn [{ json: { callbackUrl: ctx.callbackUrl, payload: payload } }];"
+      },
+      "id": "aaaaaaaa-0000-0000-0000-000000000004",
+      "name": "Construir Reply Contrato",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {}
+      },
+      "id": "aaaaaaaa-0000-0000-0000-000000000005",
+      "name": "HTTP - Callback Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Adaptar", "type": "main", "index": 0 }]] },
+    "Adaptar": { "main": [[{ "node": "IA Stub", "type": "main", "index": 0 }]] },
+    "IA Stub": { "main": [[{ "node": "Construir Reply Contrato", "type": "main", "index": 0 }]] },
+    "Construir Reply Contrato": { "main": [[{ "node": "HTTP - Callback Backend", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "id": "jchatcontracttest",
+  "tags": []
+}
