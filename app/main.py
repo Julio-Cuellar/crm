@@ -1,24 +1,32 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from app.core.config import settings
-from app.infrastructure.db.session import init_db
-from app.domain.exceptions.base import AppException
-from app.interfaces.api.routers.tenants import router as tenants_router
-from app.interfaces.api.routers.users import router as users_router
-from app.interfaces.api.routers.auth import router as auth_router
-from app.interfaces.api.routers.services import router as services_router
-from app.interfaces.api.routers.customers import router as customers_router
-from app.interfaces.api.routers.dashboard import router as dashboard_router
-from app.interfaces.api.routers.tickets import router as tickets_router
-from app.interfaces.api.routers.chats import router as chats_router
-from app.interfaces.api.routers.bridge import router as bridge_router
-from app.interfaces.api.routers.ws import router as ws_router
-from app.interfaces.api.routers.appointments import router as appointments_router
-from app.infrastructure.messaging.rabbitmq_event_bus import RabbitMQEventBus
-from app.infrastructure.messaging.consumers.tenant_created_consumer import TenantCreatedConsumer
-from app.infrastructure.db.mongo.mongo_client import mongo_client
+from app.platform.config import settings
+from app.platform.db.session import init_db
+from app.platform.app_factory import create_app
+from app.modules.tenants.interfaces.api.routers.tenants import router as tenants_router
+from app.modules.identity.interfaces.api.routers.users import router as users_router
+from app.modules.identity.interfaces.api.routers.auth import router as auth_router
+from app.modules.catalog.interfaces.api.routers.services import router as services_router
+from app.modules.customers.interfaces.api.routers.customers import router as customers_router
+from app.modules.reporting.interfaces.api.routers.dashboard import router as dashboard_router
+from app.modules.tickets.interfaces.api.routers.tickets import router as tickets_router
+from app.modules.conversations.interfaces.api.routers.chats import router as chats_router
+from app.legacy.assistant.interfaces.api.routers.bridge import router as bridge_router
+from app.modules.conversations.interfaces.api.routers.ws import router as ws_router
+from app.modules.scheduling.interfaces.api.routers.appointments import router as appointments_router
+from app.platform.messaging.rabbitmq_event_bus import RabbitMQEventBus
+from app.modules.identity.infrastructure.messaging.consumers.tenant_created_consumer import TenantCreatedConsumer
+from app.modules.identity.infrastructure.messaging.consumers.tenant_projection_consumer import TenantProjectionConsumer
+from app.modules.scheduling.infrastructure.messaging.consumers.customer_events_consumer import CustomerEventsConsumer
+from app.modules.scheduling.infrastructure.messaging.consumers.service_events_consumer import ServiceEventsConsumer
+from app.modules.tickets.infrastructure.messaging.consumers.customer_events_consumer import (
+    CustomerEventsConsumer as TicketsCustomerEventsConsumer,
+)
+from app.modules.conversations.infrastructure.messaging.consumers.customer_events_consumer import (
+    CustomerEventsConsumer as ConversationsCustomerEventsConsumer,
+)
+from app.legacy.assistant.infrastructure.messaging.consumers.chat_inbound_consumer import ChatInboundConsumer
+from app.modules.conversations.infrastructure.db.mongo.mongo_client import mongo_client
 
 
 @asynccontextmanager
@@ -38,57 +46,42 @@ async def lifespan(app: FastAPI):
     # 2. Inicializar RabbitMQ Event Bus de forma robusta
     print("[Lifespan] Conectando a RabbitMQ...")
     event_bus = RabbitMQEventBus(settings.RABBITMQ_URL)
-    consumer = None
+    consumers = []
     try:
         await event_bus.connect()
-        # Inicializar el consumidor asíncrono
-        consumer = TenantCreatedConsumer(event_bus.connection)
-        await consumer.start()
+        # Inicializar los consumidores asíncronos
+        consumers = [
+            TenantCreatedConsumer(event_bus.connection),
+            TenantProjectionConsumer(event_bus.connection),
+            CustomerEventsConsumer(event_bus.connection),
+            ServiceEventsConsumer(event_bus.connection),
+            TicketsCustomerEventsConsumer(event_bus.connection),
+            ConversationsCustomerEventsConsumer(event_bus.connection),
+            ChatInboundConsumer(event_bus.connection),
+        ]
+        for c in consumers:
+            await c.start()
     except Exception as e:
         print(f"[Lifespan Warning] No se pudo establecer conexión con RabbitMQ: {e}")
         print("[Lifespan Warning] El backend funcionará de forma degradada (sin publicación ni consumo de eventos).")
         event_bus = None
-        consumer = None
-        
+        consumers = []
+
     app.state.event_bus = event_bus
-    app.state.tenant_created_consumer = consumer
+    app.state.consumers = consumers
 
     yield
 
     # 3. Cerrar conexiones al apagar el servidor
     await mongo_client.disconnect()
-    if app.state.tenant_created_consumer:
-        await app.state.tenant_created_consumer.stop()
+    for c in app.state.consumers:
+        await c.stop()
     if app.state.event_bus:
         await app.state.event_bus.disconnect()
     print("[Lifespan] Servidor JChat CRM apagado.")
 
 
-app = FastAPI(
-    title="JChat CRM API",
-    description="Backend Multi-Tenant para automatización de citas y mensajería en canales de Meta.",
-    version="0.1.0",
-    lifespan=lifespan
-)
-
-# Configuración básica de CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # En producción se debe restringir a los dominios permitidos
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# Exception handler global para excepciones del dominio
-@app.exception_handler(AppException)
-async def app_exception_handler(request, exc: AppException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": {"code": exc.code, "message": exc.message}}
-    )
-
+app = create_app(lifespan=lifespan)
 
 # Registro de Routers
 app.include_router(tenants_router, prefix="/api/v1")

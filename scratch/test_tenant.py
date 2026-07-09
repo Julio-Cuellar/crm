@@ -5,12 +5,12 @@ import os
 # Agrega la carpeta /backend al PATH de búsqueda de Python para poder importar 'app'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.infrastructure.db.session import async_session_factory, init_db
-from app.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
-from app.application.use_cases.create_tenant import CreateTenantUseCase
-from app.application.use_cases.get_tenant import GetTenantUseCase
-from app.application.use_cases.update_tenant import UpdateTenantUseCase
-from app.domain.exceptions.tenant import TenantSlugAlreadyExistsException, TenantNotFoundException
+from app.platform.db.session import async_session_factory, init_db
+from app.modules.tenants.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
+from app.modules.tenants.application.use_cases.create_tenant import CreateTenantUseCase
+from app.modules.tenants.application.use_cases.get_tenant import GetTenantUseCase
+from app.modules.tenants.application.use_cases.update_tenant import UpdateTenantUseCase
+from app.modules.tenants.domain.exceptions.tenant import TenantSlugAlreadyExistsException, TenantNotFoundException
 
 
 async def test_tenant_flow():

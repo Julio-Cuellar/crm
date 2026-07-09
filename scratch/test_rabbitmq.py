@@ -5,8 +5,8 @@ import os
 # Agrega la carpeta /backend al PATH de búsqueda de Python para poder importar 'app'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.config import settings
-from app.infrastructure.messaging.rabbitmq_event_bus import RabbitMQEventBus
+from app.platform.config import settings
+from app.platform.messaging.rabbitmq_event_bus import RabbitMQEventBus
 
 
 async def test_rabbitmq_publish():

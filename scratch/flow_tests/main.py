@@ -5,7 +5,7 @@ import os
 # Agrega la carpeta /backend al PATH de búsqueda de Python para poder importar 'app'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from app.infrastructure.db.session import init_db
+from app.platform.db.session import init_db
 
 # Importación de cada paso modular
 from scratch.flow_tests.step_1_register import run_register_step

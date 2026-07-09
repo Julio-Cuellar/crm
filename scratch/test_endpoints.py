@@ -9,8 +9,8 @@ import time
 # Agrega la carpeta /backend al PATH de búsqueda de Python para poder importar 'app'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.infrastructure.db.session import async_session_factory
-from app.infrastructure.db.repositories.sqlalchemy_pending_registration_repository import SQLAlchemyPendingRegistrationRepository
+from app.platform.db.session import async_session_factory
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_pending_registration_repository import SQLAlchemyPendingRegistrationRepository
 
 API_BASE = "http://127.0.0.1:8000/api/v1"
 

@@ -7,9 +7,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.application.use_cases.dispatch_to_bot import DispatchToBotUseCase
-from app.domain.ports.bot_gateway import BotGateway
-from app.infrastructure.db.repositories.redis_conversation_memory_repository import (
+from app.legacy.assistant.application.use_cases.dispatch_to_bot import DispatchToBotUseCase
+from app.legacy.assistant.domain.ports.bot_gateway import BotGateway
+from app.legacy.assistant.infrastructure.db.repositories.redis_conversation_memory_repository import (
     RedisConversationMemoryRepository,
 )
 

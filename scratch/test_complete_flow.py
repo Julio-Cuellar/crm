@@ -8,9 +8,9 @@ import urllib.error
 # Agrega la carpeta /backend al PATH de búsqueda de Python para poder importar 'app'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.infrastructure.db.session import async_session_factory, init_db
-from app.infrastructure.db.repositories.sqlalchemy_pending_registration_repository import SQLAlchemyPendingRegistrationRepository
-from app.infrastructure.db.repositories.sqlalchemy_invitation_repository import SQLAlchemyInvitationRepository
+from app.platform.db.session import async_session_factory, init_db
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_pending_registration_repository import SQLAlchemyPendingRegistrationRepository
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_invitation_repository import SQLAlchemyInvitationRepository
 
 API_BASE = "http://127.0.0.1:8000/api/v1"
 
@@ -57,7 +57,7 @@ async def get_verification_token(email: str) -> str | None:
 async def get_invitation_token_direct(email: str) -> str | None:
     for _ in range(15):
         async with async_session_factory() as session:
-            from app.infrastructure.db.models.invitation import Invitation as DbInvitation
+            from app.modules.identity.infrastructure.db.models.invitation import Invitation as DbInvitation
             from sqlalchemy import select
             stmt = select(DbInvitation).where(DbInvitation.email == email)
             result = await session.execute(stmt)

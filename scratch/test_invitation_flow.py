@@ -7,23 +7,23 @@ from datetime import datetime
 # Agrega la carpeta /backend al PATH de búsqueda de Python para poder importar 'app'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.config import settings
-from app.infrastructure.db.session import async_session_factory, init_db
-from app.infrastructure.db.repositories.sqlalchemy_pending_registration_repository import SQLAlchemyPendingRegistrationRepository
-from app.infrastructure.db.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from app.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
-from app.infrastructure.db.repositories.sqlalchemy_invitation_repository import SQLAlchemyInvitationRepository
-from app.application.use_cases.register_tenant import RegisterTenantUseCase
-from app.application.use_cases.verify_registration import VerifyRegistrationUseCase
-from app.application.use_cases.create_tenant import CreateTenantUseCase
-from app.application.use_cases.create_user import CreateUserUseCase
-from app.application.use_cases.invite_user import InviteUserUseCase
-from app.application.use_cases.get_invitation_by_token import GetInvitationByTokenUseCase
-from app.application.use_cases.accept_invitation import AcceptInvitationUseCase
-from app.application.use_cases.login import LoginUseCase
-from app.infrastructure.messaging.rabbitmq_event_bus import RabbitMQEventBus
-from app.infrastructure.messaging.consumers.tenant_created_consumer import TenantCreatedConsumer
-from app.core.security import decode_token
+from app.platform.config import settings
+from app.platform.db.session import async_session_factory, init_db
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_pending_registration_repository import SQLAlchemyPendingRegistrationRepository
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
+from app.modules.tenants.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_invitation_repository import SQLAlchemyInvitationRepository
+from app.modules.identity.application.use_cases.register_tenant import RegisterTenantUseCase
+from app.modules.identity.application.use_cases.verify_registration import VerifyRegistrationUseCase
+from app.modules.tenants.application.use_cases.create_tenant import CreateTenantUseCase
+from app.modules.identity.application.use_cases.create_user import CreateUserUseCase
+from app.modules.identity.application.use_cases.invite_user import InviteUserUseCase
+from app.modules.identity.application.use_cases.get_invitation_by_token import GetInvitationByTokenUseCase
+from app.modules.identity.application.use_cases.accept_invitation import AcceptInvitationUseCase
+from app.modules.identity.application.use_cases.login import LoginUseCase
+from app.platform.messaging.rabbitmq_event_bus import RabbitMQEventBus
+from app.modules.identity.infrastructure.messaging.consumers.tenant_created_consumer import TenantCreatedConsumer
+from app.platform.security import decode_token
 
 
 async def test_invitation_flow():

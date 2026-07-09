@@ -2,10 +2,10 @@ import asyncio
 import json
 import urllib.request
 import urllib.error
-from app.infrastructure.db.session import async_session_factory
-from app.infrastructure.db.repositories.sqlalchemy_pending_registration_repository import SQLAlchemyPendingRegistrationRepository
-from app.infrastructure.db.repositories.sqlalchemy_invitation_repository import SQLAlchemyInvitationRepository
-from app.infrastructure.db.models.invitation import Invitation as DbInvitation
+from app.platform.db.session import async_session_factory
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_pending_registration_repository import SQLAlchemyPendingRegistrationRepository
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_invitation_repository import SQLAlchemyInvitationRepository
+from app.modules.identity.infrastructure.db.models.invitation import Invitation as DbInvitation
 from sqlalchemy import select
 
 API_BASE = "http://127.0.0.1:8000/api/v1"

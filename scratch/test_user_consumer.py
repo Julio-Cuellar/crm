@@ -6,13 +6,13 @@ import uuid
 # Agrega la carpeta /backend al PATH de búsqueda de Python para poder importar 'app'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.config import settings
-from app.infrastructure.db.session import async_session_factory, init_db
-from app.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
-from app.infrastructure.db.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from app.domain.entities.tenant import Tenant
-from app.infrastructure.messaging.rabbitmq_event_bus import RabbitMQEventBus
-from app.infrastructure.messaging.consumers.tenant_created_consumer import TenantCreatedConsumer
+from app.platform.config import settings
+from app.platform.db.session import async_session_factory, init_db
+from app.modules.tenants.infrastructure.db.repositories.sqlalchemy_tenant_repository import SQLAlchemyTenantRepository
+from app.modules.identity.infrastructure.db.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
+from app.modules.tenants.domain.entities.tenant import Tenant
+from app.platform.messaging.rabbitmq_event_bus import RabbitMQEventBus
+from app.modules.identity.infrastructure.messaging.consumers.tenant_created_consumer import TenantCreatedConsumer
 
 
 async def test_user_consumer_flow():
